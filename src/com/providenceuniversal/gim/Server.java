@@ -20,15 +20,12 @@ import java.util.concurrent.Executors;
 import storage.Database;
 
 /**
- * The {@code Server} class is half of the core of G-Instant Messenger™ (aside {@code Client} class).
+ * The {@code Server} class is half of the core of G-Instant Messengerâ„¢ (aside {@code Client} class).
  * It acts as a server, facilitating handling of multiple clients concurrently and storing messages and
  * user information in a database.
  * 
  * @author Garikai Gumbo<br>
- * Providence Universal Studios®<br>
- * Copyright © 2018.<br>
- * All rights reserved.
- * @version 1.0
+ * Providence Universal StudiosÂ®
  */
 public class Server{
 	
@@ -129,11 +126,7 @@ public class Server{
 	 * The {@code ClientRequestHandler} nested class handles requests from a given client parallel to
 	 * the running of the server
 	 * @author Garikai Gumbo<br>
-	 * Providence Universal Studios®<br>
-	 * Copyright © 2018.<br>
-	 * All rights reserved.
-	 * @version 1.0
-	 *
+	 * Providence Universal StudiosÂ®<br>
 	 */
 	private static class ClientRequestHandler implements Runnable{
 		
