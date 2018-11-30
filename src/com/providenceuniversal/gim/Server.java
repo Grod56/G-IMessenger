@@ -232,106 +232,128 @@ public class Server{
 
 		//Method retrieving contacts per ContactRequest
 		private ServerMessage retrieveContacts(ContactsRequest request) {
-			HashMap<String, String> contactsMap = new HashMap<String, String>();
-			
-			//Populating the contactsMap with contacts stored in the server static variables
-			for (String onlineUser: onlineUsers.keySet()) {
-				contactsMap.put(onlineUser, "Online");
-			}	
-			for (String offlineUser: offlineUsers.keySet()){
-				contactsMap.put(offlineUser,"Last seen " + offlineUsers
-						.get(offlineUser)
-						.format(DateTimeFormatter
-						.ofPattern("dd MMMM yy, HH:mm")).toString());
+			if (currentUser != null) {
+				HashMap<String, String> contactsMap = new HashMap<String, String>();
+				
+				//Populating the contactsMap with contacts stored in the server static variables
+				for (String onlineUser: onlineUsers.keySet()) {
+					contactsMap.put(onlineUser, "Online");
+				}	
+				for (String offlineUser: offlineUsers.keySet()){
+					contactsMap.put(offlineUser,"Last seen " + offlineUsers
+							.get(offlineUser)
+							.format(DateTimeFormatter
+							.ofPattern("dd MMMM yy, HH:mm")).toString());
+				}
+				contactsMap.remove(currentUser);
+				return new ContactList(contactsMap); //Returning new ContactList object
 			}
-			contactsMap.remove(currentUser);
-			return new ContactList(contactsMap); //Returning new ContactList object
+			else {
+				return new ServerError("You are logged out or your account has been deleted.");
+			}
 		}
 
 		//Method retrieving chats per ChatHistoryRequest
 		private ServerMessage retrieveChats(ChatHistoryRequest request) {
-			try {
-				
-				//Table of results storing chats between the two participants in the request
-				ResultSet chatsQuery = persistence.retrieveRecords(new String[] {"Chat_Messages"}, 
-				"(Sender = '" + request.getParticipant1() + "' AND Receiver = '" + request.getParticipant2() +
-				"') OR (Receiver = '" + request.getParticipant1() + "'AND Sender = '" +
-				request.getParticipant2() + "')", true, new String[]{"Timestamp"});
-				
-				return new ChatHistory(chatsQuery); //Returning new ChatHistory object 
-			}
-			//Returning an error response in case there is failure communicating with the database
-			catch(SQLException ex) {
-				//Returning an error in case there is failure communicating with the database
+			if (currentUser != null) {
 				try {
-					logInformation("Error at client " + clientSocket.getLocalAddress() + ": " + ex, false);
-				} catch (IOException e) {
-					System.err.println("Failed to write to log file: " + e);
+
+					//Table of results storing chats between the two participants in the request
+					ResultSet chatsQuery = persistence.retrieveRecords(new String[] { "Chat_Messages" },
+							"(Sender = '" + request.getParticipant1() + "' AND Receiver = '" + request.getParticipant2()
+									+ "') OR (Receiver = '" + request.getParticipant1() + "'AND Sender = '"
+									+ request.getParticipant2() + "')",
+							true, new String[] { "Timestamp" });
+
+					return new ChatHistory(chatsQuery); //Returning new ChatHistory object 
 				}
-				return new ServerError("Unable to retrieve your chats: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+				//Returning an error response in case there is failure communicating with the database
+				catch (SQLException ex) {
+					//Returning an error in case there is failure communicating with the database
+					try {
+						logInformation("Error at client " + clientSocket.getLocalAddress() + ": " + ex, false);
+					} catch (IOException e) {
+						System.err.println("Failed to write to log file: " + e);
+					}
+					return new ServerError("Unable to retrieve your chats: "
+							+ "There was an error connecting to the G-Instant Messenger database");
+				} 
+			}
+			else {
+				return new ServerError("You are logged out or your account has been deleted.");
 			}
 		}
 
 		//Method disconnecting/logging out user from network
 		private ServerMessage disconnectUser(UserDisconnection request) {
-			try {
-				//Updating log out time of user in database
-				persistence.updateRecord("Users", new String[] {"Last_Seen"}, new String[] {
-				Timestamp.valueOf(request.getDisconnectionTime()).toString()},
-				"Username = '" + currentUser + "'");
-				
-				//Updating server contact lists
-				onlineUsers.remove(currentUser);
-				offlineUsers.put(currentUser, request.getDisconnectionTime());
-				
-				//Logging the user disconnection
+			if (currentUser != null) {
 				try {
-					logInformation("User, " + currentUser + ", has logged off client " 
-					+ clientSocket.getInetAddress(), false);
+					//Updating log out time of user in database
+					persistence.updateRecord("Users", new String[] { "Last_Seen" },
+							new String[] { Timestamp.valueOf(request.getDisconnectionTime()).toString() },
+							"Username = '" + currentUser + "'");
+
+					//Updating server contact lists
+					onlineUsers.remove(currentUser);
+					offlineUsers.put(currentUser, request.getDisconnectionTime());
+
+					//Logging the user disconnection
+					try {
+						logInformation(
+								"User, " + currentUser + ", has logged off client " + clientSocket.getInetAddress(),
+								false);
+					} catch (IOException ex) {
+						System.err.println("Failed to write to log file: " + ex);
+					}
+
+					currentUser = null;
+
+					//Returning confirmation of success
+					return new CommitMessage("Successfully logged you out of the network");
 				}
-				catch (IOException ex) {
-					System.err.println("Failed to write to log file: " + ex);
-				}
-				
-				currentUser = null;
-				
-				//Returning confirmation of success
-				return new CommitMessage("Successfully logged you out of the network");
+				//Returning an error response in case there is failure communicating with the database
+				catch (SQLException ex) {
+					//Returning an error in case there is failure communicating with the database
+					try {
+						logInformation("Error at client " + clientSocket.getLocalAddress() + ": " + ex, false);
+					} catch (IOException e) {
+						System.err.println("Failed to write to log file: " + e);
+					}
+					return new ServerError("Unable to log you off the server: "
+							+ "There was an error connecting to the G-Instant Messenger database");
+				} 
 			}
-			//Returning an error response in case there is failure communicating with the database
-			catch (SQLException ex) {
-				//Returning an error in case there is failure communicating with the database
-				try {
-					logInformation("Error at client " + clientSocket.getLocalAddress() + ": " + ex, false);
-				} catch (IOException e) {
-					System.err.println("Failed to write to log file: " + e);
-				}
-				return new ServerError("Unable to log you off the server: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+			else {
+				return new ServerError("You are already logged out, or your account has been deleted.");
 			}
 		}
 
 		//Method sending chat message to specific user per ChatMessage request
 		private ServerMessage sendChat(ChatMessage request) {
-			try {
-				//Adding the chat message to the database
-				persistence.addRecord("Chat_Messages", Integer.toString(request.hashCode()), request.getSender(),
-				request.getRecipient(), request.getBody(), Timestamp.valueOf(request.getTimeStamp()).toString());
-				
-				//Returning confirmation of success
-				return new CommitMessage("Message was successfully sent.");
-			}
-			//Returning an error response in case there is failure communicating with the database
-			catch(SQLException ex) {
-				//Returning an error in case there is failure communicating with the database
+			if (currentUser != null) {
 				try {
-					logInformation("Error at client " + clientSocket.getLocalAddress() + ": " + ex, false);
-				} catch (IOException e) {
-					System.err.println("Failed to write to log file: " + e);
+					//Adding the chat message to the database
+					persistence.addRecord("Chat_Messages", Integer.toString(request.hashCode()), request.getSender(),
+							request.getRecipient(), request.getBody(),
+							Timestamp.valueOf(request.getTimeStamp()).toString());
+
+					//Returning confirmation of success
+					return new CommitMessage("Message was successfully sent.");
 				}
-				return new ServerError("Unable to send your message: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+				//Returning an error response in case there is failure communicating with the database
+				catch (SQLException ex) {
+					//Returning an error in case there is failure communicating with the database
+					try {
+						logInformation("Error at client " + clientSocket.getLocalAddress() + ": " + ex, false);
+					} catch (IOException e) {
+						System.err.println("Failed to write to log file: " + e);
+					}
+					return new ServerError("Unable to send your message: "
+							+ "There was an error connecting to the G-Instant Messenger database");
+				} 
+			}
+			else {
+				return new ServerError("You are logged out or your account has been deleted.");
 			}
 			
 		}
@@ -345,6 +367,9 @@ public class Server{
 				
 				//Deleting user from database and updating server contact lists in case there are matches
 				if (matches.next()) {
+					if (currentUser.equals(request.getUsername())) {
+						disconnectUser(new UserDisconnection());
+					}
 					persistence.deleteRecords("Users", "Username = '" + request.getUsername() +
 					"' AND  Password = '" + request.getPassword() + "'");
 					onlineUsers.remove(request.getUsername());

@@ -70,9 +70,9 @@ public class Client {
 				}
 				//Creating account
 				else if (option.equals("2")) {
-					System.out.println("Please enter the desired username, then your password \n"
+					System.out.println("Please enter the desired username, then your password\n"
 					+ "(Note: Username should not be blank and password has to have 4 or more characters. "
-					+ "The ' character is illegal:");
+					+ "The ' character is illegal)");
 					//Create account using input provided by user
 					newOnlineClient.signUp(keyboardInput.nextLine(), keyboardInput.nextLine());
 				}
@@ -120,7 +120,7 @@ public class Client {
 	}
 	
 	//Method to log user in
-	private void login(String username, String password) throws IOException{
+	public void login(String username, String password) throws IOException{
 		
 		int timeoutCounter = 0;
 		//Loop to retry logging user in with provided credentials in case there are network problems
@@ -285,7 +285,7 @@ public class Client {
 	}
 	
 	//Method to expose main menu options to user
-	public void enterMainMenu() throws IOException {
+	private void enterMainMenu() throws IOException {
 		
 		//Loop to cycle through menu options multiple times
 		while (true) {
@@ -308,9 +308,16 @@ public class Client {
 					//Read input
 					int selection = Integer.parseInt(keyboardInput.nextLine());
 					if (selection != 0) {
-						System.out.println("Now type in the message you want to send:");
-						String messageBody = keyboardInput.nextLine();
-						sendMessage(selection, messageBody); //Send the message
+						//Sanity checking the input
+						if (selection > 0 && selection <= contacts.getTotalNumberOfContacts()) {
+							System.out.println("Now type in the message you want to send:");
+							String messageBody = keyboardInput.nextLine();
+							sendMessage(selection, messageBody); //Send the message
+						}
+						//In case input is invalid
+						else {
+							System.out.println("You have entered an invalid option, please try again.\n");
+						} 
 					}
 				}
 				//View contacts
@@ -327,11 +334,11 @@ public class Client {
 					System.out.println(contacts + "\n" + "0. Cancel");
 					
 					//Read input
-					int input = Integer.parseInt(keyboardInput.nextLine());
-					if (input != 0) {
+					int selection = Integer.parseInt(keyboardInput.nextLine());
+					if (selection != 0) {
 						//Sanity checking input
-						if (input > 0 && input <= contacts.getTotalNumberOfContacts()) {
-							retrieveChatHistory(input); //Retrieve Chats 
+						if (selection > 0 && selection <= contacts.getTotalNumberOfContacts()) {
+							retrieveChatHistory(selection); //Retrieve Chats 
 							System.out.println();
 						}
 						//In case input is invalid
@@ -357,7 +364,7 @@ public class Client {
 	}
 	
 	//Method to send message
-		public void sendMessage(int recipientOption, String messageBody) throws IOException{
+		private void sendMessage(int recipientOption, String messageBody) throws IOException{
 			
 			int timeoutCounter = 0;
 			//Loop to retry sending message user using provided credentials in case there are network problems
@@ -410,7 +417,7 @@ public class Client {
 		}
 	
 	//Method to retrieve chat history
-	public void retrieveChatHistory(int recipientOption) throws IOException{
+	private void retrieveChatHistory(int recipientOption) throws IOException{
 		
 		int timeoutCounter = 0;
 		//Loop to retry retrieving chats in case there are network problems
@@ -506,7 +513,7 @@ public class Client {
 	}
 	
 	//Method to log user out
-	public void logout() throws IOException{
+	private void logout() throws IOException{
 		
 		int timeoutCounter =  0;
 		while (true) {
