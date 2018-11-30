@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>G-Instant Messenger</name>
+	<comment></comment>
+	<projects>
+		<project>My APIs</project>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name>org.eclipse.jdt.core.javabuilder</name>
+			<arguments>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>org.eclipse.jdt.core.javanature</nature>
+	</natures>
+	<linkedResources>
+		<link>
+			<name>storage</name>
+			<type>2</type>
+			<location>C:/Users/HP/workspace/My APIs/src</location>
+		</link>
+	</linkedResources>
+</projectDescription>
