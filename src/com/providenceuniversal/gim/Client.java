@@ -11,10 +11,6 @@ import java.util.*;
  * 
  * @author Garikai Gumbo<br>
  * Providence Universal Studios®<br>
- * Copyright © 2018.<br>
- * All rights reserved.
- * @version 1.0
- *
  */
 public class Client {
 	private User currentUser;
@@ -110,7 +106,7 @@ public class Client {
 		}
 		//Terminating the client in case the client fails to connect to the server or IO errors occur in body
 		catch (IOException ex) {
-			System.err.println("Failed to connect to G-Instant Messenger network: " + ex);
+			System.err.println("Failed to connect to G-Instant Messenger network: (" + ex.getMessage() + ")");
 			try {
 				Thread.sleep(3000);
 			}

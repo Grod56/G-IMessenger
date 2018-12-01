@@ -4,8 +4,5 @@
  * 
  * @author Garikai Gumbo<br>
  * Providence Universal Studios®<br>
- * Copyright © 2018.<br>
- * All rights reserved.
- * @version 1.0
  */
 package com.providenceuniversal.gim;

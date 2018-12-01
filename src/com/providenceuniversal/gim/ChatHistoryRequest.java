@@ -6,9 +6,6 @@ package com.providenceuniversal.gim;
  * 
  * @author Garikai Gumbo<br>
  * Providence Universal Studios®<br>
- * Copyright © 2018.<br>
- * All rights reserved.
- * @version 1.0
  */
 public class ChatHistoryRequest implements ClientMessage{
 
@@ -46,9 +43,4 @@ public class ChatHistoryRequest implements ClientMessage{
 	public void setParticipant2(String participant2) {
 		this.participant2 = participant2;
 	}
-	
-	
-	
-	
-	
 }

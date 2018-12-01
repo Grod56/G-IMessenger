@@ -5,10 +5,6 @@ package com.providenceuniversal.gim;
  * 
  * @author Garikai Gumbo<br>
  * Providence Universal Studios®<br>
- * Copyright © 2018.<br>
- * All rights reserved.
- * @version 1.0
- *
  */
 public class ContactsRequest implements ClientMessage{
 	private static final long serialVersionUID = -5113311176549308080L;
