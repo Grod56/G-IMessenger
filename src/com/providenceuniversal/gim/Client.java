@@ -117,63 +117,67 @@ public class Client {
 	
 	//Method to log user in
 	public void login(String username, String password) throws IOException{
-		
-		int timeoutCounter = 0;
-		//Loop to retry logging user in with provided credentials in case there are network problems
-		while (true) {
-			try {
-				//Creating the login request and declaring variable to store subsequent response from server
-				ClientMessage credentials = new Authentication(username.trim(),
-				password.trim(), Authentication.Type.LOGIN);
-				ServerMessage response;
+		//If statement to sanity check credentials
+		if (credentialsSanityCheck(username, password)) {
+			int timeoutCounter = 0;
+			//Loop to retry logging user in with provided credentials in case there are network problems
+			while (true) {
+				try {
+					//Creating the login request and declaring variable to store subsequent response from server
+					ClientMessage credentials = new Authentication(username.trim(), password.trim(),
+							Authentication.Type.LOGIN);
+					ServerMessage response;
 
-				outgoingRequests.writeObject(credentials);
-				outgoingRequests.flush();
+					outgoingRequests.writeObject(credentials);
+					outgoingRequests.flush();
 
-				System.out.println("Logging in ...\n");
+					System.out.println("Logging in ...\n");
 
-				//Assigning response from server to response variable
-				response = (ServerMessage) incomingResponses.readObject();
+					//Assigning response from server to response variable
+					response = (ServerMessage) incomingResponses.readObject();
 
-				//If login is successful
-				if (response instanceof User) {
-					/*Assigning User object obtained from server to client's currentUser instance variable
-					 *and entering the main menu
-					 */
-					currentUser = (User) response;
-					enterMainMenu();
-				}
-				//If login is unsuccessful
-				else {
-					ServerError error = (ServerError) response;
-					System.out.println(error + "\n");
-				}
-				break;
-			}
-			catch (IOException | ClassNotFoundException ex) {
-				/*Incrementing the timeout counter in case 
-				 *there is an error communicating with server
-				 */
-				if (timeoutCounter <= 3) {
-					timeoutCounter++;
-					try {
-						Thread.sleep(3000);
+					//If login is successful
+					if (response instanceof User) {
+						/*Assigning User object obtained from server to client's currentUser instance variable
+						 *and entering the main menu
+						 */
+						currentUser = (User) response;
+						enterMainMenu();
 					}
-					catch (InterruptedException e) {}
-				}
-				else {
-					//Throwing new IOException if the timeout has expired
-					throw new IOException(ex);
+					//If login is unsuccessful
+					else {
+						ServerError error = (ServerError) response;
+						System.out.println(error + "\n");
+					}
+					break;
+				} catch (IOException | ClassNotFoundException ex) {
+					/*Incrementing the timeout counter in case 
+					 *there is an error communicating with server
+					 */
+					if (timeoutCounter <= 3) {
+						timeoutCounter++;
+						try {
+							Thread.sleep(3000);
+						} catch (InterruptedException e) {
+						}
+					} else {
+						//Throwing new IOException if the timeout has expired
+						throw new IOException(ex);
+					}
 				}
 			} 
+		}
+		else {
+			//In case credentials fail sanity check
+			System.out.println("Your credentials do not match the"
+					+ " minimum required criteria or contain illegal characters, check your input and try again.\n");
 		}
 	}
 
 	//Method to create account
 	public void signUp(String username, String password) throws IOException{
-		
 		//If statement to sanity check credentials
-		if (!username.trim().isEmpty() && password.trim().length() >= 4 && !username.contains("'") && !password.contains("'")) {
+		if (credentialsSanityCheck(username, password)) {
 			int timeoutCounter = 0;
 			//Loop to retry signing user up using provided credentials in case there are network problems
 			while (true) {
@@ -231,52 +235,56 @@ public class Client {
 	
 	//Method to delete account
 	public void deleteAccount(String username, String password) throws IOException{
-		
-		int timeoutCounter = 0;
-		
-		//Loop to retry deleting user using provided credentials in case there are network problems
-		while (true) {
-			try {
-				//Creating the deletion request and declaring variable to store subsequent response from server
-				ClientMessage credentials = new Authentication(username,
-				password, Authentication.Type.ACCOUNT_DELETION);
-				ServerMessage response;
+		//If statement to sanity check credentials
+		if (credentialsSanityCheck(username, password)) {
+			int timeoutCounter = 0;
+			//Loop to retry deleting user using provided credentials in case there are network problems
+			while (true) {
+				try {
+					//Creating the deletion request and declaring variable to store subsequent response from server
+					ClientMessage credentials = new Authentication(username, password,
+							Authentication.Type.ACCOUNT_DELETION);
+					ServerMessage response;
 
-				outgoingRequests.writeObject(credentials);
-				outgoingRequests.flush();
+					outgoingRequests.writeObject(credentials);
+					outgoingRequests.flush();
 
-				System.out.println("Deleting account ...\n");
+					System.out.println("Deleting account ...\n");
 
-				//Assigning response from server to response variable
-				response = (ServerMessage) incomingResponses.readObject();
+					//Assigning response from server to response variable
+					response = (ServerMessage) incomingResponses.readObject();
 
-				//If deletion is successful
-				if (response instanceof CommitMessage) {
-					System.out.println((CommitMessage) response + "\n");
-				}
-				//If deletion is unsuccessful
-				else {
-					ServerError error = (ServerError) response;
-					System.out.println(error + "\n");
-				}
-				break;
-			}
-			catch (IOException | ClassNotFoundException ex) {
-				/*Incrementing the timeout counter in case 
-				 *there is an error communicating with server
-				 */
-				if (timeoutCounter <= 3) {
-					timeoutCounter++;
-					try {
-						Thread.sleep(3000);
+					//If deletion is successful
+					if (response instanceof CommitMessage) {
+						System.out.println((CommitMessage) response + "\n");
 					}
-					catch (InterruptedException e) {}
-				}
-				else {
-					//Throwing new IOException if the timeout has expired
-					throw new IOException(ex);
+					//If deletion is unsuccessful
+					else {
+						ServerError error = (ServerError) response;
+						System.out.println(error + "\n");
+					}
+					break;
+				} catch (IOException | ClassNotFoundException ex) {
+					/*Incrementing the timeout counter in case 
+					 *there is an error communicating with server
+					 */
+					if (timeoutCounter <= 3) {
+						timeoutCounter++;
+						try {
+							Thread.sleep(3000);
+						} catch (InterruptedException e) {
+						}
+					} else {
+						//Throwing new IOException if the timeout has expired
+						throw new IOException(ex);
+					}
 				}
 			} 
+		}
+		//In case credentials fail sanity check
+		else {
+			System.out.println("Your credentials do not match the"
+			+ " minimum required criteria or contain illegal characters, check your input and try again.\n");
 		}
 	}
 	
@@ -553,5 +561,11 @@ public class Client {
 				}
 			} 
 		}
+	}
+	
+	//Method to sanity check, authentication credentials
+	private boolean credentialsSanityCheck(String username, String password) {
+		return (!username.trim().isEmpty() && !username.contains("'") &&
+				password.trim().length() >= 4  && !password.contains("'")) ? true: false;
 	}
 }
