@@ -316,7 +316,7 @@ public class Client {
 					int selection = Integer.parseInt(keyboardInput.nextLine());
 					if (selection != 0) {
 						//Sanity checking the input
-						if (selection > 0 && selection < contacts.getTotalNumberOfContacts()) {
+						if (selection > 0 && selection <= contacts.getTotalNumberOfContacts()) {
 							System.out.println("Now type in the message you want to send:");
 							String messageBody = keyboardInput.nextLine();
 							sendMessage(selection, messageBody); //Send the message
@@ -344,7 +344,7 @@ public class Client {
 					int selection = Integer.parseInt(keyboardInput.nextLine());
 					if (selection != 0) {
 						//Sanity checking input
-						if (selection > 0 && selection < contacts.getTotalNumberOfContacts()) {
+						if (selection > 0 && selection <= contacts.getTotalNumberOfContacts()) {
 							retrieveChatHistory(selection); //Retrieve Chats 
 							System.out.println();
 						}
