@@ -10,8 +10,8 @@ package com.providenceuniversal.gim;
 public class ChatHistoryRequest implements ClientMessage{
 
 	private static final long serialVersionUID = 4017620732994082282L;
-	private String participant1;
-	private String participant2;
+	private final String participant1;
+	private final String participant2;
 	
 	/**
 	 * Creates new {@code ChatHistoryRequest} object and initializes the participants list with
@@ -32,15 +32,7 @@ public class ChatHistoryRequest implements ClientMessage{
 		return participant1;
 	}
 
-	public void setParticipant1(String participant1) {
-		this.participant1 = participant1;
-	}
-
 	public String getParticipant2() {
 		return participant2;
-	}
-
-	public void setParticipant2(String participant2) {
-		this.participant2 = participant2;
 	}
 }

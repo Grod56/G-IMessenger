@@ -26,11 +26,8 @@ public class ChatHistory implements ServerMessage{
 	public ChatHistory(ResultSet chatsQuery) throws SQLException {
 		chats = new ArrayList<ChatMessage>();
 		while(chatsQuery.next()) {
-			ChatMessage chat = new ChatMessage();
-			chat.setSender(chatsQuery.getString(2));
-			chat.setRecipient(chatsQuery.getString(3));
-			chat.setBody(chatsQuery.getString(4));
-			chat.setTimeStamp(chatsQuery.getTimestamp(5).toLocalDateTime());
+			ChatMessage chat = new ChatMessage(chatsQuery.getString(2), chatsQuery.getString(3),
+					chatsQuery.getString(4), chatsQuery.getTimestamp(5).toLocalDateTime());
 			chats.add(chat);
 		}
 	}
@@ -41,10 +38,6 @@ public class ChatHistory implements ServerMessage{
 		return chats;
 	}
 
-	public void setChats(ArrayList<ChatMessage> chats) {
-		this.chats = chats;
-	}
-	
 	//____________________________________________________________________________________________________
 
 	/**

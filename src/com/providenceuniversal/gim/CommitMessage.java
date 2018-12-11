@@ -11,7 +11,7 @@ package com.providenceuniversal.gim;
 public class CommitMessage implements ServerMessage {
 	
 	private static final long serialVersionUID = -4505251784940529145L;
-	private String message;
+	private final String message;
 	
 	/**
 	 * Creates new {@code CommitMessage} and initializes the message with the
@@ -28,9 +28,7 @@ public class CommitMessage implements ServerMessage {
 		return message;
 	}
 
-	void setMessage(String message) {
-		this.message = message;
-	}
+	
 	
 	//____________________________________________________________________________________________________
 

@@ -10,21 +10,13 @@ import java.time.format.DateTimeFormatter;
  * @author Garikai Gumbo<br>
  * Providence Universal Studios®<br>
  */
-public class ChatMessage implements ClientMessage{
+public class ChatMessage implements ClientMessage, ServerMessage{
 	
 	private static final long serialVersionUID = 7670884855089704404L;
-	private String sender;
-	private String recipient;
-	private String body;
-	private LocalDateTime timeStamp;
-	
-	/**
-	 * Creates {@code ChatMessage} object and sets the time stamp to {@code LocalDateTime.now()}
-	 */
-	public ChatMessage() {
-		super();
-		timeStamp = LocalDateTime.now();
-	}
+	private final String sender;
+	private final String recipient;
+	private final String body;
+	private final LocalDateTime timeStamp;
 	
 	/**
 	 * Creates {@code ChatMessage} object and sets the time stamp to {@code LocalDateTime.now()},
@@ -35,10 +27,11 @@ public class ChatMessage implements ClientMessage{
 	 * @param body Message body
 	 */
 	public ChatMessage(String sender, String recipient, String body) {
-		this();
+		super();
 		this.sender = sender;
 		this.recipient = recipient;
 		this.body = body;
+		timeStamp = LocalDateTime.now();
 	}
 	
 	/**
@@ -63,28 +56,15 @@ public class ChatMessage implements ClientMessage{
 	public String getSender() {
 		return sender;
 	}
-	public void setSender(String sender) {
-		this.sender = sender;
-	}
 	public String getRecipient() {
 		return recipient;
 	}
-	public void setRecipient(String recipient) {
-		this.recipient = recipient;
-	}
 	public String getBody() {
-		return body;
-	}
-	public void setBody(String body) {
-		this.body = body;
+		return body.replace("''", "'");
 	}
 	public LocalDateTime getTimeStamp() {
 		return timeStamp;
 	}
-	public void setTimeStamp(LocalDateTime timeStamp) {
-		this.timeStamp = timeStamp;
-	}
-
 	//_______________________________________________________________________________________________
 	@Override
 	public int hashCode() {
@@ -139,7 +119,7 @@ public class ChatMessage implements ClientMessage{
 	@Override
 	public String toString() {
 		return "[" + timeStamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-		+ "] " + sender + "> " + body;
+		+ "] " + sender + "> " + body.replaceAll("''", "'");
 	}
 	
 	

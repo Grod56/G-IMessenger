@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 public class UserDisconnection implements ClientMessage{
 
 	private static final long serialVersionUID = -523437620577113206L;
-	private LocalDateTime disconnectionTime;
+	private final LocalDateTime disconnectionTime;
 	
 	/**
 	 * Creates {@code UserDisconnection} object and assigns {@code LocalDateTime.now()}
@@ -27,9 +27,6 @@ public class UserDisconnection implements ClientMessage{
 
 	public LocalDateTime getDisconnectionTime() {
 		return disconnectionTime;
-	}
-	public void setDisconnectionTime(LocalDateTime disconnectionTime) {
-		this.disconnectionTime = disconnectionTime;
 	}
 	
 }

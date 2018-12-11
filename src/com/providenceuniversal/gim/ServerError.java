@@ -28,9 +28,7 @@ public class ServerError implements ServerMessage {
 		return errorMessage;
 	}
 
-	public void setErrorMessage(String errorMessage) {
-		this.errorMessage = errorMessage;
-	}
+	
 
 	//____________________________________________________________________________________________________
 	

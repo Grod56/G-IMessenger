@@ -23,10 +23,8 @@ public class Authentication implements ClientMessage{
 	public static enum Type {LOGIN, ACCOUNT_CREATION, ACCOUNT_DELETION}
 
 	private static final long serialVersionUID = 2667643613192464372L;
-	private String username, password;
-	private Type authenticationType;
-	
-	public Authentication() {}
+	private final String username, password;
+	private final Type authenticationType;
 	
 	/**
 	 * Creates new {@code Authentication} object and initializes credentials and authentication type with
@@ -47,19 +45,10 @@ public class Authentication implements ClientMessage{
 	String getUsername() {
 		return username;
 	}
-	void setUsername(String username) {
-		this.username = username;
-	}
 	String getPassword() {
 		return password;
 	}
-	void setPassword(String password) {
-		this.password = password;
-	}
 	Type getAuthenticationType() {
 		return authenticationType;
-	}
-	void setAuthenticationType(Type authenticationType) {
-		this.authenticationType = authenticationType;
 	}
 }

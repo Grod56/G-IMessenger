@@ -15,8 +15,8 @@ import java.util.stream.IntStream;
 public class ContactList implements ServerMessage{
 
 	private static final long serialVersionUID = -8209371024479092657L;
-	private HashMap<String, String> contactsMap;
-	private String[] contactNames;
+	private final HashMap<String, String> contactsMap;
+	private final String[] contactNames;
 	
 	/**
 	 * Creates {@code ContactList} object and fills the contact list with parameter value
@@ -33,22 +33,12 @@ public class ContactList implements ServerMessage{
 		return contactsMap;
 	}
 
-	void setContactsMap(HashMap<String, String> contactsMap) {
-		this.contactsMap = contactsMap;
-		contactNames = contactsMap.keySet().toArray(new String[] {});
-	}
-	
 	public String getContactName(int position) {
 		return contactNames[position - 1];
 	}
 	
 	//____________________________________________________________________________________________________
 	
-	void removeContact(String contactName) {
-		contactsMap.remove(contactName);
-		contactNames = contactsMap.keySet().toArray(new String[] {});
-	}
-
 	int getTotalNumberOfContacts() {
 		return contactsMap.size();	
 	}

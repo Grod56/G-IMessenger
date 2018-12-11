@@ -8,14 +8,17 @@ import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import storage.Database;
 
@@ -25,45 +28,55 @@ import storage.Database;
  * user information in a database.
  * 
  * @author Garikai Gumbo<br>
- * Providence Universal Studios®
+ * Providence Universal Studiosï¿½
  */
 public class Server{
 	
 	//_________________________________Server Initialization and Startup_____________________________________
 	
 	//Static variables to store users logged in and logged out of the system (respectively)
-	private static HashMap<String, ClientRequestHandler> onlineUsers;
-	private static HashMap<String, LocalDateTime> offlineUsers;
+	private static ServerSocket serverSocket;
 	private static FileWriter logFileWriter;
 	private static Database persistence;
+	private static HashMap<String, ClientRequestHandler> onlineUsers;
+	private static HashMap<String, LocalDateTime> offlineUsers;
+	private static volatile ExecutorService commandExecutor, clientsExecutor,
+											listenersExecutor, notificationsExecutor;
 	
-	//Static initializer to instantiate the server's static variables
+	//Static initializer to instantiate the server's static variables and initiate logger
 	static {
 		onlineUsers = new HashMap<String, ClientRequestHandler>();
 		offlineUsers = new HashMap<String, LocalDateTime>();
-	}
-	
-	public static void main(String[] args) {
+		clientsExecutor = Executors.newCachedThreadPool();
+		notificationsExecutor = Executors.newCachedThreadPool();
+		listenersExecutor = Executors.newCachedThreadPool();
+		commandExecutor = Executors.newSingleThreadExecutor();
+		commandExecutor.execute(() -> commandListener());
 		
 		//Creating new file object referencing the location of the relevant log file
 		File logFile = new File(System.getProperty("user.home") + "/G-Instant Messenger/logs/logFile.log");
-		
 		//Creating the log file in case it does not exist
 		if (!logFile.exists())
 			logFile.getParentFile().mkdirs();
+		try {
+			FileWriter logFileWriter = new FileWriter(logFile, true);
+			Server.logFileWriter = logFileWriter;
+		}
+		catch (IOException ex) {
+			System.err.println("Fatal server error: (" + ex + ")");
+			System.exit(1);
+		}
+	}
+	
+	public static void main(String[] args) {
 		
 		//Try-with-resources block setting up the resources to be used by the server
 		try(ServerSocket serverSocket = new ServerSocket(4279);
 			Database persistence = new Database("g_im.db");){
 			
-			FileWriter logFileWriter = new FileWriter(logFile, true);
-			
 			//Referencing static resources to the local instances
-			Server.logFileWriter = logFileWriter;
+			Server.serverSocket = serverSocket;
 			Server.persistence = persistence;
-			
-			//Executor service which shall be used to handle multiple clients
-			ExecutorService executor = Executors.newCachedThreadPool();
 			
 			//Table of results obtained from database containing all users of G-Instant Messenger
 			ResultSet users = persistence.retrieveRecords(new String[] {"Users"}, true);
@@ -72,29 +85,40 @@ public class Server{
 			while(users.next()) {
 				offlineUsers.put(users.getString(1), Timestamp.valueOf(users.getString(3)).toLocalDateTime());
 			}
-			
+			users.close();
 			//Logging initial messages
 			logInformation("Server running on '" +
-			InetAddress.getLocalHost().getHostName() + "' and listening on port "
-			+ serverSocket.getLocalPort(), true);
+			InetAddress.getLocalHost().getHostName() + "' (" + InetAddress.getLocalHost().getHostAddress() +
+			") and listening on port " + serverSocket.getLocalPort(), true);
 			logInformation("Waiting for client connections ... " + System.lineSeparator(), false);
 			
 			//Loop to listen for any client connections
 			while (true) {
-				Socket handlerSocket = serverSocket.accept();
-				
-				//Creation and execution of separate handler thread upon connection
-				Runnable handler = new Server.ClientRequestHandler(handlerSocket);
-				executor.execute(handler);
-				//Logging client connection
-				logInformation("Client, " + handlerSocket.getInetAddress().getHostName() +
-				" (" + handlerSocket.getInetAddress().getHostAddress() + ")," +
-				" has connected to the server.", false);	
+				//Try block to handle the shutting down of the serverSocket
+				try {
+					Socket handlerSocket = serverSocket.accept();
+					//Creation and execution of separate handler thread upon connection
+					clientsExecutor.execute(new Server.ClientRequestHandler(handlerSocket));
+					//Logging client connection
+					logInformation("Client, " + handlerSocket.getInetAddress().getHostName() +
+					" (" + handlerSocket.getInetAddress().getHostAddress() + ")," +
+					" has connected to the server.", false);
+				}
+				catch (SocketException ex) {
+					//Throwing exception if exception was not caused by the shutting down of the serverSocket
+					if (!serverSocket.isClosed()) {
+						throw new IOException(ex);
+					}
+					else {
+						//Logging final information
+						logInformation("Server successfully shutdown.", false);
+						break;
+					}
+				}
 			}
 		}
 		//Terminate server in case there is an error communicating with server resources
 		catch(IOException | SQLException ex) {
-			
 			//Logging the terminating exception
 			try {
 				logInformation("Fatal server error: " + ex, false);
@@ -104,6 +128,7 @@ public class Server{
 			}
 		}
 		finally {
+			//Closing the logFileWriter resource
 			try {
 				logFileWriter.close();
 			}
@@ -120,6 +145,49 @@ public class Server{
 		logFileWriter.flush();
 	}
 	
+	//Method to listen for any keyboard commands
+	static void commandListener() {
+		Scanner keyboardInput = new Scanner(System.in);
+		while (true) {
+			String command = keyboardInput.nextLine().trim();
+			//Execute if shutdown command is passed
+			if (command.equalsIgnoreCase("shutdown")) {
+				try {
+					logInformation("Shutting down server ...", false);
+					keyboardInput.close();
+				}
+				catch (IOException ex) {
+					System.err.println("Failed to write to log file: (" + ex + ")");
+				}
+				//Shutting down all running threads
+				clientsExecutor.shutdown();
+				notificationsExecutor.shutdown();
+				listenersExecutor.shutdown();
+				try {
+					//Wait for confirmation of termination from all executors
+					clientsExecutor.awaitTermination(5, TimeUnit.SECONDS);
+					notificationsExecutor.awaitTermination(3, TimeUnit.SECONDS);
+					listenersExecutor.awaitTermination(2, TimeUnit.SECONDS);
+					
+					//Shutting down command listener and serverSocket
+					commandExecutor.shutdown();
+					serverSocket.close();
+				}
+				//In case the shutdown sequence incurs some errors
+				catch (IOException | InterruptedException ex) {
+					//Logging the errors
+					try {
+						logInformation("Errors while shutting down server: (" + ex + ")", false);
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+					}
+				}
+				break;
+			}
+		}
+	}
+	
 	//______________________________________Handling of individual clients_____________________________________
 	
 	/**
@@ -132,32 +200,35 @@ public class Server{
 		
 		//Instance variables for given client handler
 		private final Socket handlerSocket;
+		private ObjectOutputStream outgoingServerMessages;
 		private String currentUser;
 		
 		//Constructor assigning the handler's handlerSocket reference
 		ClientRequestHandler(Socket handlerSocket) throws SQLException{
 			this.handlerSocket = handlerSocket;
+			listenersExecutor.execute(() -> checkForShutdownStatus());
 		}
 		
 		@Override
 		public void run() {
 			//Try-with-resources block setting up the resources to be used by the handler
-			try(ObjectOutputStream outgoingResponse = new ObjectOutputStream(handlerSocket.getOutputStream());
-				ObjectInputStream incomingRequest = new ObjectInputStream(handlerSocket.getInputStream());){
+			try(ObjectOutputStream outgoingResponses = new ObjectOutputStream(handlerSocket.getOutputStream());
+				ObjectInputStream incomingRequests = new ObjectInputStream(handlerSocket.getInputStream());){
 				
-				int timeoutCounter = 0;
+				outgoingServerMessages = outgoingResponses;
+				int timeoutCounter = 1;
+				
 				//Loop to listen for client requests
-				while(true) {
+				while(!clientsExecutor.isShutdown()) {
 					try {
-						ClientMessage request = (ClientMessage) incomingRequest.readObject();
-						outgoingResponse.writeObject(handleRequest(request));
-						outgoingResponse.flush();
+						ClientMessage request = (ClientMessage) incomingRequests.readObject();
+						sendServerMessage(handleRequest(request));
 					}
 					catch (IOException | ClassNotFoundException ex) {
 						/*Incrementing the timeout counter in case 
 						 *there is an error communicating with client socket
 						 */
-						if (timeoutCounter <= 3) {
+						if (timeoutCounter < 3) {
 							timeoutCounter++;
 							try {
 								Thread.sleep(3000);
@@ -171,11 +242,27 @@ public class Server{
 					}
 				}
 			}
-			/*Disconnecting the client in case there are errors
-			 *communicating with the client handler resources
+			catch(IOException ex) {}
+			/*Disconnecting the client
+			 * 
 			 */
-			catch(IOException ex) {
-				disconnectClient();
+			disconnectClient();
+		}
+		
+		//Method to check if shutdown sequence is in progress
+		private void checkForShutdownStatus() {
+			while(true) {
+				//Checking if the client has been disconnected
+				if (!handlerSocket.isClosed()) {
+					if (clientsExecutor.isShutdown()) {
+						disconnectClient();
+						break;
+					} 
+				}
+				//Execute if the client has been disconnected
+				else {
+					break;
+				}
 			}
 		}
 
@@ -185,8 +272,6 @@ public class Server{
 			//If-else if block to determine the request type
 			if (request instanceof Authentication) { //Executes if the client request is Authentication
 				Authentication authenticationRequest = (Authentication) request;
-				
-				//If-else if block to determine Authentication type
 				
 				//Executes if account creation
 				if (authenticationRequest.getAuthenticationType().equals(Authentication.Type.ACCOUNT_CREATION)) {
@@ -285,11 +370,16 @@ public class Server{
 					handlerSocket.getInetAddress(), false);
 				}
 				catch (IOException ex) {
-					System.err.println("Failed to write to log file: " + ex);
+					System.err.println("Failed to write to log file: (" + ex + ")");
 				}
 
+				//Notifying all clients that the user has logged off
+				if (!clientsExecutor.isShutdown()) {
+					String offlineUser = currentUser;
+					notificationsExecutor.execute(() -> sendNotification(
+							new ServerNotification("User '" + offlineUser + "', is now offline.")));
+				}
 				currentUser = null;
-
 				//Returning confirmation of success
 				return new CommitMessage("Successfully logged you out of the network");
 			}
@@ -316,6 +406,8 @@ public class Server{
 						request.getRecipient(), request.getBody(),
 						Timestamp.valueOf(request.getTimeStamp()).toString());
 
+				//Notifying recipient of new message
+				notificationsExecutor.execute(() -> sendNotification(request));
 				//Returning confirmation of success
 				return new CommitMessage("Message was successfully sent.");
 			}
@@ -336,30 +428,34 @@ public class Server{
 
 		//Method deleting account as specified in the Authentication request credentials
 		private ServerMessage deleteAccount(Authentication request) {
-			//Checking if account is already logged in on another client
-			if (!onlineUsers.containsKey(request.getUsername())) {
-				try {
+			try {
+				//Checking if account is already logged in on another client
+				if (!onlineUsers.containsKey(persistence.retrieveRecords(new String[] {"Users"}, "Username = '" +
+					request.getUsername() + "'", false).getString(1))) {
+					
 					//Table of results to store the user retrieved from database matching credentials in request
 					ResultSet matches = persistence.retrieveRecords(new String[] { "Users" }, "Username = '"
 					+ request.getUsername() + "' AND  Password = '" + request.getPassword() + "'", false);
 
 					//Deleting user from database and updating server contact lists in case there are matches
 					if (matches.next()) {
-						onlineUsers.get(request.getUsername()).disconnectUser(new UserDisconnection());
 						persistence.deleteRecords("Users", "Username = '" + request.getUsername()
 						+ "' AND  Password = '" + request.getPassword() + "'");
 						onlineUsers.remove(request.getUsername());
 						offlineUsers.remove(request.getUsername());
-
+						
 						//Logging the account deletion
 						try {
 							logInformation("User, " + request.getUsername() +
 									", has terminated their account", false);
 						}
 						catch (IOException ex) {
-							System.err.println("Failed to write to log file: " + ex);
+							System.err.println("Failed to write to log file: (" + ex + ")");
 						}
 
+						//Notifying all clients that the user has deleted their account
+						notificationsExecutor.execute(() -> sendNotification(new ServerNotification("User '" +
+						request.getUsername() + "', has deleted their account")));
 						//Returning confirmation of success
 						return new CommitMessage("Successfully deleted the user.");
 					}
@@ -368,24 +464,24 @@ public class Server{
 						return new ServerError("The credentials you entered are invalid.");
 					}
 				}
-				//Returning an error response in case there is failure communicating with the database
-				catch (SQLException ex) {
-					//Logging the exception
-					try {
-						logInformation("Error at handler for client " + handlerSocket.getInetAddress() +
-								": " + ex, false);
-					}
-					catch (IOException e) {
-						System.err.println("Failed to write to log file: " + e);
-					}
-					return new ServerError("Unable to delete your account: "
-							+ "There was an error connecting to the G-Instant Messenger database");
-				} 
+				else {
+					//Returning an error response in case the account is logged in on another client
+					return new ServerError("Unable to delete user; the user is logged in on another client.");
+				}
 			}
-			else {
-				//Returning an error response in case the account is logged in on another client
-				return new ServerError("Unable to delete user; the user is logged in on another client.");
-			}
+			//Returning an error response in case there is failure communicating with the database
+			catch (SQLException ex) {
+				//Logging the exception
+				try {
+					logInformation("Error at handler for client " + handlerSocket.getInetAddress() +
+							": " + ex, false);
+				}
+				catch (IOException e) {
+					System.err.println("Failed to write to log file: " + e);
+				}
+				return new ServerError("Unable to delete your account: "
+						+ "There was an error connecting to the G-Instant Messenger database");
+			} 
 		}
 
 		//Method logging account in as specified in the Authentication request credentials
@@ -402,17 +498,20 @@ public class Server{
 				if (matches.next()) {
 					//Checking if account is already online
 					if (!onlineUsers.containsKey(request.getUsername())) {
-						onlineUsers.put(matches.getString(1), this);
 						offlineUsers.remove(matches.getString(1));
+						onlineUsers.put(matches.getString(1), this);
 						currentUser = matches.getString(1);
 						//Logging the login
 						try {
-							logInformation("User, " + currentUser + ", has logged into client, "
+							logInformation("User, " + currentUser + ", has logged in at client, "
 									+ handlerSocket.getInetAddress(), false);
 						}
 						catch (IOException ex) {
-							System.err.println("Failed to write to log file: " + ex);
+							System.err.println("Failed to write to log file: (" + ex + ")");
 						}
+						//Notifying all clients that the user has logged in
+						notificationsExecutor.execute(() -> sendNotification(new ServerNotification("User '" +
+						currentUser.toString() + "', is now online.")));
 						return new User(currentUser); //Returning user object
 					}
 					else {
@@ -443,7 +542,7 @@ public class Server{
 		//Method creating user as specified in the Authentication request credentials
 		private ServerMessage createAccount(Authentication request) {
 			try {
-				//Checking if username is present in both user lists
+				//Checking if username is already taken
 				if (!persistence.retrieveRecords(new String[] {"Users"}, "Username = '" +
 					request.getUsername() + "'", false).next()) {
 			
@@ -451,7 +550,6 @@ public class Server{
 					persistence.addRecord("Users", new String[] {request.getUsername(), request.getPassword(),
 					Timestamp.valueOf(LocalDateTime.now()).toString()});
 					onlineUsers.put(request.getUsername(), this);
-
 					//Assigning user's username to handler's current username instance variable
 					currentUser = request.getUsername();
 
@@ -461,9 +559,14 @@ public class Server{
 						+ handlerSocket.getInetAddress(), false);
 					}
 					catch (IOException ex) {
-						System.err.println("Failed to write to log file: " + ex);
+						System.err.println("Failed to write to log file: (" + ex + ")");
 					}
 
+					//Notifying all clients that the user has joined the network
+					notificationsExecutor.execute(() -> notificationsExecutor.execute(() -> 
+					sendNotification(new ServerNotification("User '" +
+					currentUser.toString() + "', is now online"))));
+					
 					return new User(currentUser);
 				}
 				//Returning an error response in case the username already exists
@@ -497,24 +600,52 @@ public class Server{
 					offlineUsers.put(currentUser, LocalDateTime.now());
 					currentUser = null;
 				}
-				try {
-					handlerSocket.close();
-				}
-				catch (IOException e) {}
 			}
+			try {
+				handlerSocket.close();
+			}
+			catch (IOException e) {}
 			//Logging the disconnection
 			try {
 				logInformation("Client, " + handlerSocket.getInetAddress() +
 				", has disconnected from server.", false);
 			}
 			catch (IOException ex) {
-				System.err.println("Failed to write to log file: " + ex);
+				System.err.println("Failed to write to log file: (" + ex + ")");
 			}
 		}
 		
-		@SuppressWarnings("unused")
-		Socket getClientSocket() {
-			return handlerSocket;
+		//Method to send server message to client
+		synchronized void sendServerMessage(ServerMessage message) throws IOException {
+			outgoingServerMessages.writeObject(message);
+			outgoingServerMessages.flush();
 		}
+		
+		//Method to send notification to client(s)
+		private void sendNotification(ServerMessage notification) {
+			//If notification is a chat message
+			if (notification instanceof ChatMessage) {
+				ChatMessage chat = (ChatMessage) notification;
+				//Send message if the user is online
+				if (onlineUsers.containsKey(chat.getRecipient())) {
+					try {
+						onlineUsers.get(chat.getRecipient()).sendServerMessage(notification);
+					} 
+					catch (IOException ex) {}
+				}
+			}
+			//If the notifications is a broadcast server notification
+			else if (notification instanceof ServerNotification) {
+				onlineUsers.forEach((k, v) -> {
+					if (!k.equals(currentUser)) {
+						try {
+							v.sendServerMessage(notification);
+						} 
+						catch (IOException ex) {}
+					}
+				});
+			}
+		}
+		
 	}
 }
