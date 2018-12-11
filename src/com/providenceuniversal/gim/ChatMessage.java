@@ -60,7 +60,7 @@ public class ChatMessage implements ClientMessage, ServerMessage{
 		return recipient;
 	}
 	public String getBody() {
-		return body.replace("''", "'");
+		return body;
 	}
 	public LocalDateTime getTimeStamp() {
 		return timeStamp;
