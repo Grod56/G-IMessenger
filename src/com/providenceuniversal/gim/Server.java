@@ -435,7 +435,8 @@ public class Server{
 			try {
 				//Adding the chat message to the database
 				database.addRecord("Chat_Messages", Integer.toString(request.hashCode()),
-						request.getSender(), request.getRecipient(), request.getBody(),
+						request.getSender(), request.getRecipient(),
+						request.getBody().replace("'","''"),
 						Timestamp.valueOf(request.getTimeStamp()).toString());
 
 				//Notifying recipient of new message

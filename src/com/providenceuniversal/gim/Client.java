@@ -393,8 +393,7 @@ public class Client {
 					 *variable to store subsequent response from server
 					 */
 					ClientMessage chatMessage = new ChatMessage(currentUser.getUsername(),
-					contacts.getContactName(recipientOption),
-					messageBody.replace("'", "''"));
+					contacts.getContactName(recipientOption), messageBody);
 					//Sending the request to the server
 					outgoingRequests.writeObject(chatMessage);
 					outgoingRequests.flush();

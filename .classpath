@@ -7,6 +7,6 @@
 	</classpathentry>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="src" path="storage"/>
-	<classpathentry kind="lib" path="C:/Users/HP/Downloads/Transaction Folder/sqlite-jdbc-3.23.1.jar"/>
+	<classpathentry exported="true" kind="lib" path="C:/Users/HP/Downloads/Transaction Folder/sqlite-jdbc-3.23.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

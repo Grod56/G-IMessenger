@@ -51,7 +51,7 @@ public class ChatMessage implements ClientMessage, ServerMessage{
 		this.timeStamp = timeStamp;
 	}
 	
-	//_________________________________Getters and setters for each field_________________________________
+	//_________________________________Getters and setters for each field____________________________
 
 	public String getSender() {
 		return sender;
@@ -119,7 +119,7 @@ public class ChatMessage implements ClientMessage, ServerMessage{
 	@Override
 	public String toString() {
 		return "[" + timeStamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-		+ "] " + sender + "> " + body.replaceAll("''", "'");
+		+ "] " + sender + "> " + body;
 	}
 	
 	
