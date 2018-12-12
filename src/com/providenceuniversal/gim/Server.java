@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import storage.Database;
@@ -37,7 +38,7 @@ public class Server{
 	//Static variables to store users logged in and logged out of the system (respectively)
 	private static ServerSocket serverSocket;
 	private static FileWriter logFileWriter;
-	private static Database persistence;
+	private static Database database;
 	private static HashMap<String, ClientRequestHandler> onlineUsers;
 	private static HashMap<String, LocalDateTime> offlineUsers;
 	private static volatile ExecutorService commandExecutor, clientsExecutor,
@@ -47,11 +48,10 @@ public class Server{
 	static {
 		onlineUsers = new HashMap<String, ClientRequestHandler>();
 		offlineUsers = new HashMap<String, LocalDateTime>();
-		clientsExecutor = Executors.newCachedThreadPool();
-		notificationsExecutor = Executors.newCachedThreadPool();
-		listenersExecutor = Executors.newCachedThreadPool();
 		commandExecutor = Executors.newSingleThreadExecutor();
-		commandExecutor.execute(() -> commandListener());
+		clientsExecutor = Executors.newCachedThreadPool();
+		listenersExecutor = Executors.newCachedThreadPool();
+		notificationsExecutor = Executors.newCachedThreadPool();
 		
 		//Creating new file object referencing the location of the relevant log file
 		File logFile = new File(System.getProperty("user.home") + "/G-Instant Messenger/logs/logFile.log");
@@ -61,6 +61,7 @@ public class Server{
 		try {
 			FileWriter logFileWriter = new FileWriter(logFile, true);
 			Server.logFileWriter = logFileWriter;
+			commandExecutor.execute(() -> commandListener());
 		}
 		catch (IOException ex) {
 			System.err.println("Fatal server error: (" + ex + ")");
@@ -72,14 +73,14 @@ public class Server{
 		
 		//Try-with-resources block setting up the resources to be used by the server
 		try(ServerSocket serverSocket = new ServerSocket(4279);
-			Database persistence = new Database("g_im.db");){
+			Database database = new Database("g_im.db");){
 			
 			//Referencing static resources to the local instances
 			Server.serverSocket = serverSocket;
-			Server.persistence = persistence;
+			Server.database = database;
 			
 			//Table of results obtained from database containing all users of G-Instant Messenger
-			ResultSet users = persistence.retrieveRecords(new String[] {"Users"}, true);
+			ResultSet users = database.retrieveRecords(new String[] {"Users"}, true);
 			
 			//Loop to fill the offline users collection with the users ResultSet
 			while(users.next()) {
@@ -87,22 +88,17 @@ public class Server{
 			}
 			users.close();
 			//Logging initial messages
-			logInformation("Server running on '" +
-			InetAddress.getLocalHost().getHostName() + "' (" + InetAddress.getLocalHost().getHostAddress() +
-			") and listening on port " + serverSocket.getLocalPort(), true);
+			logInformation("Server running on '" + InetAddress.getLocalHost().getHostName() +
+			"' (" + InetAddress.getLocalHost().getHostAddress() + ") and listening on port " +
+			serverSocket.getLocalPort(), true);
 			logInformation("Waiting for client connections ... " + System.lineSeparator(), false);
 			
 			//Loop to listen for any client connections
 			while (true) {
-				//Try block to handle the shutting down of the serverSocket
 				try {
 					Socket handlerSocket = serverSocket.accept();
 					//Creation and execution of separate handler thread upon connection
 					clientsExecutor.execute(new Server.ClientRequestHandler(handlerSocket));
-					//Logging client connection
-					logInformation("Client, " + handlerSocket.getInetAddress().getHostName() +
-					" (" + handlerSocket.getInetAddress().getHostAddress() + ")," +
-					" has connected to the server.", false);
 				}
 				catch (SocketException ex) {
 					//Throwing exception if exception was not caused by the shutting down of the serverSocket
@@ -112,27 +108,35 @@ public class Server{
 					else {
 						//Logging final information
 						logInformation("Server successfully shutdown.", false);
+						logFileWriter.close();
 						break;
 					}
 				}
+				catch (RejectedExecutionException ex) {}
 			}
 		}
-		//Terminate server in case there is an error communicating with server resources
+		/*Terminate server in case there is an error communicating with 
+		 *server resources or other sundry server errors
+		*/
 		catch(IOException | SQLException ex) {
 			//Logging the terminating exception
 			try {
 				logInformation("Fatal server error: " + ex, false);
+				if (!commandExecutor.isShutdown()) {
+					commandExecutor.shutdownNow();
+					commandExecutor.awaitTermination(2, TimeUnit.SECONDS);
+				}
 			}
-			catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-		finally {
+			catch (IOException | InterruptedException e) {}
 			//Closing the logFileWriter resource
-			try {
-				logFileWriter.close();
+			finally {
+				try {
+					logFileWriter.close();
+				}
+				catch (IOException e) {}
 			}
-			catch (IOException e) {}
+			//Exiting the system
+			System.exit(1);
 		}
 	}
 	
@@ -152,38 +156,47 @@ public class Server{
 			String command = keyboardInput.nextLine().trim();
 			//Execute if shutdown command is passed
 			if (command.equalsIgnoreCase("shutdown")) {
+				initiateShutdownSequence();
+				keyboardInput.close();
+				
+				//Shutting down command executor and serverSocket
+				commandExecutor.shutdown();
 				try {
-					logInformation("Shutting down server ...", false);
-					keyboardInput.close();
-				}
-				catch (IOException ex) {
-					System.err.println("Failed to write to log file: (" + ex + ")");
-				}
-				//Shutting down all running threads
-				clientsExecutor.shutdown();
-				notificationsExecutor.shutdown();
-				listenersExecutor.shutdown();
-				try {
-					//Wait for confirmation of termination from all executors
-					clientsExecutor.awaitTermination(5, TimeUnit.SECONDS);
-					notificationsExecutor.awaitTermination(3, TimeUnit.SECONDS);
-					listenersExecutor.awaitTermination(2, TimeUnit.SECONDS);
-					
-					//Shutting down command listener and serverSocket
-					commandExecutor.shutdown();
 					serverSocket.close();
 				}
-				//In case the shutdown sequence incurs some errors
-				catch (IOException | InterruptedException ex) {
-					//Logging the errors
-					try {
-						logInformation("Errors while shutting down server: (" + ex + ")", false);
-					}
-					catch (IOException e) {
-						e.printStackTrace();
-					}
-				}
+				catch (IOException e) {}
 				break;
+			}
+		}
+	}
+	
+	//Method to shutdown server
+	static void initiateShutdownSequence() {
+		//Logging the shutdown initiation
+		try {
+			logInformation("Shutting down server ...", false);
+		}
+		catch (IOException ex) {
+			System.err.println("Failed to write to log file: (" + ex + ")");
+		}
+		
+		//Shutting down all running threads
+		try {
+			notificationsExecutor.shutdown();
+			listenersExecutor.shutdown();
+			clientsExecutor.shutdown();
+			notificationsExecutor.awaitTermination(5, TimeUnit.SECONDS);
+			listenersExecutor.awaitTermination(2, TimeUnit.SECONDS);
+			clientsExecutor.awaitTermination(2, TimeUnit.SECONDS);
+		}
+		//In case the shutdown sequence incurs some errors
+		catch (InterruptedException ex) {
+			//Logging the errors
+			try {
+				logInformation("Errors while shutting down server: (" + ex + ")", false);
+			}
+			catch (IOException e) {
+				System.err.println("Failed to write to log file: (" + e + ")");
 			}
 		}
 	}
@@ -216,10 +229,20 @@ public class Server{
 				ObjectInputStream incomingRequests = new ObjectInputStream(handlerSocket.getInputStream());){
 				
 				outgoingServerMessages = outgoingResponses;
-				int timeoutCounter = 1;
 				
+				//Logging client connection
+				try {
+					logInformation("Client, " + handlerSocket.getInetAddress().getHostName() +
+					" (" + handlerSocket.getInetAddress().getHostAddress() + ")," +
+					" has connected to the server.", false);
+				}
+				catch (IOException ex) {
+					System.err.println("Failed to write to log file: (" + ex + ")");
+				}
+				
+				int timeoutCounter = 1;
 				//Loop to listen for client requests
-				while(!clientsExecutor.isShutdown()) {
+				while(true) {
 					try {
 						ClientMessage request = (ClientMessage) incomingRequests.readObject();
 						sendServerMessage(handleRequest(request));
@@ -231,7 +254,12 @@ public class Server{
 						if (timeoutCounter < 3) {
 							timeoutCounter++;
 							try {
-								Thread.sleep(3000);
+								if (!clientsExecutor.isShutdown()) {
+									Thread.sleep(3000);
+								}
+								else {
+									break;
+								}
 							}
 							catch (InterruptedException e) {}
 						}
@@ -242,27 +270,32 @@ public class Server{
 					}
 				}
 			}
-			catch(IOException ex) {}
-			/*Disconnecting the client
-			 * 
-			 */
-			disconnectClient();
+			//In case there is an error setting up resources or timeout expires
+			catch(IOException ex) {
+				/*Disconnecting the client
+				 *
+				 */
+				disconnectClient();
+			}
 		}
-		
+
 		//Method to check if shutdown sequence is in progress
 		private void checkForShutdownStatus() {
 			while(true) {
 				//Checking if the client has been disconnected
 				if (!handlerSocket.isClosed()) {
-					if (clientsExecutor.isShutdown()) {
+					if (listenersExecutor.isShutdown()) {
 						disconnectClient();
-						break;
-					} 
+					}
 				}
-				//Execute if the client has been disconnected
+				//Break out of the loop if the client has been disconnected
 				else {
 					break;
 				}
+				try {
+					Thread.sleep(1);
+				}
+				catch (InterruptedException e) {}
 			}
 		}
 
@@ -330,7 +363,7 @@ public class Server{
 		private ServerMessage retrieveChats(ChatHistoryRequest request) {
 			try {
 				//Table of results storing chats between the two participants in the request
-				ResultSet chatsQuery = persistence.retrieveRecords(new String[] { "Chat_Messages" },
+				ResultSet chatsQuery = database.retrieveRecords(new String[] { "Chat_Messages" },
 				"(Sender = '" + request.getParticipant1() + "' AND Receiver = '" + request.getParticipant2()
 				+ "') OR (Receiver = '" + request.getParticipant1() + "'AND Sender = '"
 				+ request.getParticipant2() + "')", true, new String[] { "Timestamp" });
@@ -348,7 +381,7 @@ public class Server{
 					System.err.println("Failed to write to log file: " + e);
 				}
 				return new ServerError("Unable to retrieve your chats: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+						+ "There was an error communicating with the G-Instant Messenger database");
 			}
 		}
 
@@ -356,7 +389,7 @@ public class Server{
 		private ServerMessage disconnectUser(UserDisconnection request) {
 			try {
 				//Updating log out time of user in database
-				persistence.updateRecord("Users", new String[] { "Last_Seen" },
+				database.updateRecord("Users", new String[] { "Last_Seen" },
 						new String[] { Timestamp.valueOf(request.getDisconnectionTime()).toString() },
 						"Username = '" + currentUser + "'");
 
@@ -374,11 +407,10 @@ public class Server{
 				}
 
 				//Notifying all clients that the user has logged off
-				if (!clientsExecutor.isShutdown()) {
-					String offlineUser = currentUser;
+				String offlineUser = currentUser;
+				if (!notificationsExecutor.isShutdown())
 					notificationsExecutor.execute(() -> sendNotification(
 							new ServerNotification("User '" + offlineUser + "', is now offline.")));
-				}
 				currentUser = null;
 				//Returning confirmation of success
 				return new CommitMessage("Successfully logged you out of the network");
@@ -394,7 +426,7 @@ public class Server{
 					System.err.println("Failed to write to log file: " + e);
 				}
 				return new ServerError("Unable to log you off the server: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+						+ "There was an error communicating with the G-Instant Messenger database");
 			}
 		}
 
@@ -402,12 +434,13 @@ public class Server{
 		private ServerMessage sendChat(ChatMessage request) {
 			try {
 				//Adding the chat message to the database
-				persistence.addRecord("Chat_Messages", Integer.toString(request.hashCode()), request.getSender(),
-						request.getRecipient(), request.getBody(),
+				database.addRecord("Chat_Messages", Integer.toString(request.hashCode()),
+						request.getSender(), request.getRecipient(), request.getBody(),
 						Timestamp.valueOf(request.getTimeStamp()).toString());
 
 				//Notifying recipient of new message
-				notificationsExecutor.execute(() -> sendNotification(request));
+				if (!notificationsExecutor.isShutdown())
+					notificationsExecutor.execute(() -> sendNotification(request));
 				//Returning confirmation of success
 				return new CommitMessage("Message was successfully sent.");
 			}
@@ -422,7 +455,7 @@ public class Server{
 					System.err.println("Failed to write to log file: " + e);
 				}
 				return new ServerError("Unable to send your message: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+						+ "There was an error communicating with the G-Instant Messenger database");
 			} 
 		}
 
@@ -430,16 +463,16 @@ public class Server{
 		private ServerMessage deleteAccount(Authentication request) {
 			try {
 				//Checking if account is already logged in on another client
-				if (!onlineUsers.containsKey(persistence.retrieveRecords(new String[] {"Users"}, "Username = '" +
+				if (!onlineUsers.containsKey(database.retrieveRecords(new String[] {"Users"}, "Username = '" +
 					request.getUsername() + "'", false).getString(1))) {
 					
 					//Table of results to store the user retrieved from database matching credentials in request
-					ResultSet matches = persistence.retrieveRecords(new String[] { "Users" }, "Username = '"
+					ResultSet matches = database.retrieveRecords(new String[] { "Users" }, "Username = '"
 					+ request.getUsername() + "' AND  Password = '" + request.getPassword() + "'", false);
 
 					//Deleting user from database and updating server contact lists in case there are matches
 					if (matches.next()) {
-						persistence.deleteRecords("Users", "Username = '" + request.getUsername()
+						database.deleteRecords("Users", "Username = '" + request.getUsername()
 						+ "' AND  Password = '" + request.getPassword() + "'");
 						onlineUsers.remove(request.getUsername());
 						offlineUsers.remove(request.getUsername());
@@ -454,8 +487,9 @@ public class Server{
 						}
 
 						//Notifying all clients that the user has deleted their account
-						notificationsExecutor.execute(() -> sendNotification(new ServerNotification("User '" +
-						request.getUsername() + "', has deleted their account")));
+						if (!notificationsExecutor.isShutdown())
+							notificationsExecutor.execute(() -> sendNotification(new ServerNotification("User '" +
+							request.getUsername() + "', has deleted their account")));
 						//Returning confirmation of success
 						return new CommitMessage("Successfully deleted the user.");
 					}
@@ -480,7 +514,7 @@ public class Server{
 					System.err.println("Failed to write to log file: " + e);
 				}
 				return new ServerError("Unable to delete your account: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+						+ "There was an error communicating with the G-Instant Messenger database");
 			} 
 		}
 
@@ -488,7 +522,7 @@ public class Server{
 		private ServerMessage login(Authentication request) {
 			try {
 				//Table of results to store the user retrieved from database matching credentials in request
-				ResultSet matches = persistence.retrieveRecords(new String[] {"Users"},
+				ResultSet matches = database.retrieveRecords(new String[] {"Users"},
 				"Username = '" + request.getUsername() +
 				"' AND Password = '" + request.getPassword() + "'", false);
 				
@@ -497,7 +531,7 @@ public class Server{
 				 */
 				if (matches.next()) {
 					//Checking if account is already online
-					if (!onlineUsers.containsKey(request.getUsername())) {
+					if (!onlineUsers.containsKey(matches.getString(1))) {
 						offlineUsers.remove(matches.getString(1));
 						onlineUsers.put(matches.getString(1), this);
 						currentUser = matches.getString(1);
@@ -510,8 +544,9 @@ public class Server{
 							System.err.println("Failed to write to log file: (" + ex + ")");
 						}
 						//Notifying all clients that the user has logged in
-						notificationsExecutor.execute(() -> sendNotification(new ServerNotification("User '" +
-						currentUser.toString() + "', is now online.")));
+						if (!notificationsExecutor.isShutdown())
+							notificationsExecutor.execute(() -> sendNotification(new ServerNotification("User '" +
+							currentUser.toString() + "', is now online.")));
 						return new User(currentUser); //Returning user object
 					}
 					else {
@@ -535,7 +570,7 @@ public class Server{
 					System.err.println("Failed to write to log file: " + e);
 				}
 				return new ServerError("Unable to log you in: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+						+ "There was an error communicating with the G-Instant Messenger database");
 			}
 		}
 
@@ -543,11 +578,11 @@ public class Server{
 		private ServerMessage createAccount(Authentication request) {
 			try {
 				//Checking if username is already taken
-				if (!persistence.retrieveRecords(new String[] {"Users"}, "Username = '" +
+				if (!database.retrieveRecords(new String[] {"Users"}, "Username = '" +
 					request.getUsername() + "'", false).next()) {
 			
 					//Adding user to database and onlineUsers list
-					persistence.addRecord("Users", new String[] {request.getUsername(), request.getPassword(),
+					database.addRecord("Users", new String[] {request.getUsername(), request.getPassword(),
 					Timestamp.valueOf(LocalDateTime.now()).toString()});
 					onlineUsers.put(request.getUsername(), this);
 					//Assigning user's username to handler's current username instance variable
@@ -563,9 +598,9 @@ public class Server{
 					}
 
 					//Notifying all clients that the user has joined the network
-					notificationsExecutor.execute(() -> notificationsExecutor.execute(() -> 
-					sendNotification(new ServerNotification("User '" +
-					currentUser.toString() + "', is now online"))));
+					if (!notificationsExecutor.isShutdown())
+						notificationsExecutor.execute(() -> sendNotification(new ServerNotification("User '" +
+						currentUser.toString() + "', is now online")));
 					
 					return new User(currentUser);
 				}
@@ -586,7 +621,7 @@ public class Server{
 					System.err.println("Failed to write to log file: " + e);
 				}
 				return new ServerError("Unable to create your account: "
-						+ "There was an error connecting to the G-Instant Messenger database");
+						+ "There was an error communicating with the G-Instant Messenger database");
 			}
 		}
 		
@@ -595,6 +630,7 @@ public class Server{
 			//Logging user out first in case the client terminated with an account logged in
 			if (currentUser != null) {
 				ServerMessage userDisconnectResponse = disconnectUser(new UserDisconnection());
+				//Execute in case user disconnection fails
 				if(userDisconnectResponse instanceof ServerError) {
 					onlineUsers.remove(currentUser);
 					offlineUsers.put(currentUser, LocalDateTime.now());
@@ -602,7 +638,9 @@ public class Server{
 				}
 			}
 			try {
-				handlerSocket.close();
+				//Closing the socket resource if not already (particularly for when shutdown sequence is initiated)
+				if (!handlerSocket.isClosed())
+					handlerSocket.close();
 			}
 			catch (IOException e) {}
 			//Logging the disconnection
@@ -630,7 +668,7 @@ public class Server{
 				if (onlineUsers.containsKey(chat.getRecipient())) {
 					try {
 						onlineUsers.get(chat.getRecipient()).sendServerMessage(notification);
-					} 
+					}
 					catch (IOException ex) {}
 				}
 			}
@@ -640,12 +678,11 @@ public class Server{
 					if (!k.equals(currentUser)) {
 						try {
 							v.sendServerMessage(notification);
-						} 
-						catch (IOException ex) {}
+						} catch (IOException ex) {
+						}
 					}
 				});
-			}
+			} 
 		}
-		
 	}
 }

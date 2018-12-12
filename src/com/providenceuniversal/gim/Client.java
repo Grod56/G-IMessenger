@@ -200,7 +200,8 @@ public class Client {
 						System.out.println(error + "\n");
 					}
 					break;
-				} catch (IOException | ClassNotFoundException ex) {
+				}
+				catch (IOException | ClassNotFoundException ex) {
 					/*Incrementing the timeout counter in case 
 					 *there is an error communicating with server
 					 */
@@ -208,9 +209,10 @@ public class Client {
 						timeoutCounter++;
 						try {
 							Thread.sleep(3000);
-						} catch (InterruptedException e) {
 						}
-					} else {
+						catch (InterruptedException e) {}
+					}
+					else {
 						//Throwing new IOException if the timeout has expired
 						throw new IOException(ex);
 					}
